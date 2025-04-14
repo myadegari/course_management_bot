@@ -48,22 +48,28 @@ def register_user_data(bot, message):
 
 def main_keyboard_flow():
     main_buttons = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    main_buttons.add(KeyboardButton(BTN.USER_MAIN_MENU["SHOW_COURSES"]))
-    main_buttons.add(KeyboardButton(BTN.USER_MAIN_MENU["MY_COURSES"]))
+    main_buttons.add(KeyboardButton(BTN.USER_MAIN_MENU.SHOW_COURSES))
+    main_buttons.add(KeyboardButton(BTN.USER_MAIN_MENU.MY_COURSES))
     main_buttons.add(
-        KeyboardButton(BTN.USER_MAIN_MENU["ACCOUNT_INFO"]),
-        KeyboardButton(BTN.USER_MAIN_MENU["CERTIFICATE"]),
+        KeyboardButton(BTN.USER_MAIN_MENU.ACCOUNT_INFO),
+        KeyboardButton(BTN.USER_MAIN_MENU.CERTIFICATE),
     )
     return main_buttons
 
 
 def admin_keyboard_flow():
-    keyboard = InlineKeyboardMarkup()
-    buttons = (
-        InlineKeyboardButton("ایجاد دوره جدید", callback_data="CREATE_COURSE"),
-        InlineKeyboardButton("ویرایش دوره", callback_data="EDIT_COURSE"),
-        InlineKeyboardButton("لیست دوره ها", callback_data="LIST_COURSES"),
+    main_buttons = ReplyKeyboardMarkup(row_width=3, resize_keyboard=True)
+    main_buttons.add(KeyboardButton(BTN.ADMIN_MAIN_MENU.SHOW_COURSES))
+    main_buttons.add(KeyboardButton(BTN.ADMIN_MAIN_MENU.ADD_COURSE),
+                     KeyboardButton(BTN.ADMIN_MAIN_MENU.EDIT_COURSE),
+                     KeyboardButton(BTN.ADMIN_MAIN_MENU.DELETE_COURSE),
+                     )
+    main_buttons.add(
+        KeyboardButton(BTN.ADMIN_MAIN_MENU.SHOW_USERS),
+        KeyboardButton(BTN.ADMIN_MAIN_MENU.SHOW_CERTIFICATES),
     )
-    for button in buttons:
-        keyboard.row(button)
-    return keyboard
+    main_buttons.add(
+        KeyboardButton(BTN.ADMIN_MAIN_MENU.SEND_MESSAGE),
+        KeyboardButton(BTN.ADMIN_MAIN_MENU.ACCOUNT_INFO),
+    )
+    return main_buttons

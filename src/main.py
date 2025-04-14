@@ -22,7 +22,7 @@ import pathlib
 import os
 models.Base.metadata.create_all(bind=engine)
 
-# API_TOKEN = '<api_token>'
+
 BASE_DIR = pathlib.Path(__file__).parent.absolute()
 load_dotenv(BASE_DIR / ".env")
 
@@ -38,7 +38,7 @@ logging.basicConfig(
 )
 
 
-# Handle '/start' and '/help'
+
 @bot.message_handler(commands=["start"])
 @inject
 def send_welcome(message: telebot.types.Message, db: Session = Dependency(get_db)):
@@ -406,18 +406,27 @@ def start_callback(call, db: Session = Dependency(get_db)):
 @bot.message_handler(func=lambda message: True)
 @inject
 def handle_system_message(message, db: Session = Dependency(get_db)):
-    if message.text == BTN.USER_MAIN_MENU["ACCOUNT_INFO"]:
-        user = crud.get_user_by_bale_id(db, bale_id=str(message.from_user.id))
-        if any((user.first_name, user.last_name, user.national_id)):
+    match message.text:
+        case BTN.USER_MAIN_MENU.ACCOUNT_INFO:
+            user = crud.get_user_by_bale_id(db, bale_id=str(message.from_user.id))
+            if any((user.first_name, user.last_name, user.national_id)):
+                bot.send_message(
+                    message.from_user.id,
+                    (
+                        "🤖 اطلاعات شما:\n"
+                        f"نام: {user.first_name}\n"
+                        f"نام خانوادگی: {user.last_name}\n"
+                    ),
+                    reply_markup=user_flow.account_info_keyboard_flow(),
+                )
+        case BTN.ADMIN_MAIN_MENU.ADD_COURSE:
             bot.send_message(
                 message.from_user.id,
-                (
-                    "🤖 اطلاعات شما:\n"
-                    f"نام: {user.first_name}\n"
-                    f"نام خانوادگی: {user.last_name}\n"
-                ),
-                reply_markup=user_flow.account_info_keyboard_flow(),
+                "لطفا اطلاعات دوره را به فرمت زیر وارد کنید:\n\n"
+                "عنوان دوره\nتوضیحات دوره\nمدت زمان دوره\nهزینه دوره"
             )
+            bot.register_next_step_handler(message, process_create_course, db)
 
+        
 
 bot.infinity_polling()
