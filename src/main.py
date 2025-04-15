@@ -3,13 +3,19 @@
 # This is a simple echo bot using the decorator mechanism.
 # It echoes any incoming text messages.
 import logging
+import os
+import pathlib
 import re
 from xmlrpc.client import boolean
+from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 import telebot
+from dotenv import load_dotenv
 
 # from repositories.utils import get_db
 from sqlalchemy.orm import Session
+
+from src.utils import jalali
 
 from .constants import BTN, MSG
 from .control import USER_CONTROL_FLOW, user_flow
@@ -17,9 +23,7 @@ from .repositories import crud, models
 from .repositories.database import engine
 from .repositories.utils import get_db
 from .utils.dependency import Dependency, inject
-from dotenv import load_dotenv
-import pathlib
-import os
+
 models.Base.metadata.create_all(bind=engine)
 
 
@@ -36,7 +40,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     filename="bot.log",
 )
-
 
 
 @bot.message_handler(commands=["start"])
@@ -422,11 +425,178 @@ def handle_system_message(message, db: Session = Dependency(get_db)):
         case BTN.ADMIN_MAIN_MENU.ADD_COURSE:
             bot.send_message(
                 message.from_user.id,
-                "لطفا اطلاعات دوره را به فرمت زیر وارد کنید:\n\n"
-                "عنوان دوره\nتوضیحات دوره\nمدت زمان دوره\nهزینه دوره"
+                ("لطفا اطلاعات دوره را وارد کنید:\n" "عنوان دوره\n"),
             )
-            bot.register_next_step_handler(message, process_create_course, db)
+            bot.register_next_step_handler(message, process_create_course_step_1, db)
+        case BTN.ADMIN_MAIN_MENU.LIST_COURSES:
+            courses = crud.get_all_courses(db)
+            if courses:
+                message = (
+                    "لیست دوره ها:\n"
+                    "برای مشاهده جزئیات دوره، روی عنوان آن کلیک کنید:\n\n"
+                )
+                keys = InlineKeyboardMarkup()
+                for course in courses:
+                    keys.add(
+                        InlineKeyboardButton(
+                            course.title,
+                            callback_data=f"COURSE_{course.id}",
+                        )
+                    )
+                bot.send_message(message.from_user.id, message, reply_markup=keys)
+            else:
+                bot.send_message(message.from_user.id, "هیچ دوره ای وجود ندارد.")
 
-        
+
+def process_create_course_step_1(message: telebot.types.Message, db: Session):
+    try:
+        # Extract course details from the message text
+        title = message.text.strip()
+        if not title:
+            logging.error(
+                f"[USER-{message.from_user.id}] Invalid Course Title: {message.text}"
+            )
+            msg = bot.reply_to(message, "عنوان دوره نمی تواند خالی باشد.")
+            bot.register_next_step_handler(msg, process_create_course_step_1, db)
+            return
+        course = models.Courses(title=title)
+        msg = bot.reply_to(message, "لطفا توضیحات دوره را وارد کنید:")
+        bot.register_next_step_handler(msg, process_create_course_step_2, course, db)
+
+    except Exception as e:
+        bot.reply_to(message, "خطایی در ایجاد دوره رخ داده است.")
+        logging.error(f"Error in process_create_course_step_1: {e}")
+
+
+def process_create_course_step_2(
+    message: telebot.types.Message,
+    course: models.Courses,
+    db: Session,
+):
+    try:
+        description = message.text.strip()
+        if not description:
+            logging.error(
+                f"[USER-{message.from_user.id}] Invalid Course Description: {message.text}"
+            )
+            msg = bot.reply_to(message, "توضیحات دوره نمی تواند خالی باشد.")
+            bot.register_next_step_handler(
+                msg, process_create_course_step_2, course, db
+            )
+            return
+        course.description = description
+        msg = bot.reply_to(message, "لطفا هزینه دوره را به ریال وارد کنید:")
+        bot.register_next_step_handler(msg, process_create_course_step_3, course, db)
+
+    except Exception as e:
+        bot.reply_to(message, "خطایی در ایجاد دوره رخ داده است.")
+        logging.error(f"Error in process_create_course_step_2: {e}")
+
+
+def process_create_course_step_3(
+    message: telebot.types.Message,
+    course: models.Courses,
+    db: Session,
+):
+    try:
+        price = message.text.strip()
+        if not price.isdigit():
+            logging.error(
+                f"[USER-{message.from_user.id}] Invalid Course Price: {message.text}"
+            )
+            msg = bot.reply_to(message, "قیمت دوره باید یک عدد صحیح باشد.")
+            bot.register_next_step_handler(
+                msg, process_create_course_step_3, course, db
+            )
+            return
+        course.price = int(price)
+        msg = bot.reply_to(message, "لطفا ظرفیت دوره را وارد کنید:")
+        bot.register_next_step_handler(msg, process_create_course_step_4, course, db)
+    except Exception as e:
+        bot.reply_to(message, "خطایی در ایجاد دوره رخ داده است.")
+        logging.error(f"Error in process_create_course_step_3: {e}")
+
+
+def process_create_course_step_4(
+    message: telebot.types.Message,
+    course: models.Courses,
+    db: Session,
+):
+    try:
+        capacity = message.text.strip()
+        if not capacity.isdigit():
+            logging.error(
+                f"[USER-{message.from_user.id}] Invalid Course Capacity: {message.text}"
+            )
+            msg = bot.reply_to(message, "ظرفیت دوره باید یک عدد صحیح باشد.")
+            bot.register_next_step_handler(
+                msg, process_create_course_step_4, course, db
+            )
+            return
+        course.capacity = int(capacity)
+        msg = bot.reply_to(
+            message,
+            (
+                "لطفا تاریخ شروع دوره را وارد کنید (فرمت صحیح تاریخ yyyy-mm-dd):\n"
+                "مثال:1404-01-01\n"
+            ),
+        )
+        bot.register_next_step_handler(msg, process_create_course_step_5, course, db)
+    except Exception as e:
+        bot.reply_to(message, "خطایی در ایجاد دوره رخ داده است.")
+        logging.error(f"Error in process_create_course_step_4: {e}")
+
+
+def process_create_course_step_5(
+    message: telebot.types.Message,
+    course: models.Courses,
+    db: Session,
+):
+    try:
+        start_date = message.text.strip()
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", start_date):
+            logging.error(
+                f"[USER-{message.from_user.id}] Invalid Course Start Date: {message.text}"
+            )
+            msg = bot.reply_to(message, "تاریخ شروع دوره باید به فرمت yyyy-mm-dd باشد.")
+            bot.register_next_step_handler(
+                msg, process_create_course_step_5, course, db
+            )
+            return
+        course.start_date = jalali.Persian(start_date).to_gregorian()
+        msg = bot.reply_to(message, ("لطفا مدت دوره را به روز وارد کنید\n"))
+        bot.register_next_step_handler(msg, process_create_course_step_6, course, db)
+    except Exception as e:
+        bot.reply_to(message, "خطایی در ایجاد دوره رخ داده است.")
+        logging.error(f"Error in process_create_course_step_5: {e}")
+
+
+def process_create_course_step_6(
+    message: telebot.types.Message,
+    course: models.Courses,
+    db: Session,
+):
+    try:
+        duration = message.text.strip()
+        if not duration.isdigit():
+            logging.error(
+                f"[USER-{message.from_user.id}] Invalid Course Duration: {message.text}"
+            )
+            msg = bot.reply_to(message, "مدت دوره باید یک عدد صحیح باشد.")
+            bot.register_next_step_handler(
+                msg, process_create_course_step_6, course, db
+            )
+            return
+        course.duration = int(duration)
+        course.expired_date = (
+            jalali.Persian(course.start_date).add_days(course.duration).to_gregorian()
+        )
+        db.add(course)
+        db.commit()
+        bot.reply_to(message, "دوره با موفقیت ایجاد شد.")
+    except Exception as e:
+        bot.reply_to(message, "خطایی در ایجاد دوره رخ داده است.")
+        logging.error(f"Error in process_create_course_step_6: {e}")
+
 
 bot.infinity_polling()

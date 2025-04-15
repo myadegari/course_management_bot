@@ -46,6 +46,7 @@ class Courses(Base):
     __tablename__ = "courses"
     id = Column(PGUUID, default=lambda: uuid4(), primary_key=True, index=True)
     title = Column(String(512), nullable=False)
+    discription = Column(String(1024), nullable=False)
     capacity = Column(Integer, nullable=False)
     price = Column(Integer, nullable=False)
     is_active = Column(Boolean, default=True)
